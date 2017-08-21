@@ -41,7 +41,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <arrayfire.h>
 #include <af/cuda.h>
 
-typedef uint8_t rgb_type;
+// typedef uint8_t rgb_type;
+typedef float rgb_type;
 
 namespace af_extension {
 
@@ -97,9 +98,9 @@ colormap_kernel( const int num, const float * d_x, rgb_type * d_y
             b = table( level, frac, af_extension::Blue );
         }
 
-        d_y[id + num * 0] = r * 255;
-        d_y[id + num * 1] = g * 255;
-        d_y[id + num * 2] = b * 255;
+        d_y[id + num * 0] = r;// * 255;
+        d_y[id + num * 1] = g;// * 255;
+        d_y[id + num * 2] = b;// * 255;
     }
 }
 
@@ -134,7 +135,10 @@ colorMap( const af::array& gray, const af::array& levels, const af::array& color
 
     cudaDeviceSynchronize();
 
-    rgb.unlock();
+    gray.unlock();
+    rgb.unlock();    
+    levels.unlock();
+    colors.unlock();
 
     return rgb;
 }
