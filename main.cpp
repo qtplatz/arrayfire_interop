@@ -43,24 +43,29 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "colormap.hpp"
 #include <iomanip>
 
+template< typename T > using af_unique_ptr = std::unique_ptr< T, std::function<void(T*)> >;    
+
 int
 main(int argc, char * argv[])
 {
     (void)argc;
     (void)argv;
 
-    float data[]  = { 0.10, 0.11, 0.12, 0.13, 0.14
-                      , 0.20, 0.21, 0.22, 0.23, 0.24
-                      , 0.30, 0.31, 0.32, 0.33, 0.34
-                      , 0.40, 0.41, 0.42, 0.43, 0.44
-                      , 0.50, 0.51, 0.52, 0.53, 0.54
+    float data[]  = { 0.10, 0.11, 0.12, 0.13, 0.14, 0.15
+                      , 0.20, 0.21, 0.22, 0.23, 0.24, 0.25
+                      , 0.30, 0.31, 0.32, 0.33, 0.34, 0.35
+                      , 0.40, 0.41, 0.42, 0.43, 0.44, 0.45
+                      , 0.50, 0.51, 0.52, 0.53, 0.54, 0.55
     };
+    constexpr size_t ncols = 6;
+    constexpr size_t nrows = 5;
+
 #if 1
     // OpenCV cv::Mat <--> af::arry conversion
     // no transposed version
     {
         // mat is the row,col array
-        cv::Mat mat = cv::Mat( 4, 5, CV_32FC(1), data );
+        cv::Mat mat = cv::Mat( 5, ncols, CV_32FC(1), data );
         std::cout << "Source cv::Mat : " << mat << std::endl;
         
         // array is the col,row array
@@ -84,7 +89,7 @@ main(int argc, char * argv[])
 #if 1
     // transposed version
     {
-        cv::Mat mat = cv::Mat( 4, 5, CV_32FC(1), data );        
+        cv::Mat mat = cv::Mat( 4, ncols, CV_32FC(1), data );        
         std::cout << "--------------------------------------------------" << std::endl;
         af::array gray = af::array( mat.cols, mat.rows, 1, mat.ptr< float >( 0 ) ).T();
         af::print( "Converted to af::array (transposed) gray: ", gray );
@@ -108,40 +113,30 @@ main(int argc, char * argv[])
         std::cout << "Back to cv::Mat :\n" << mat2 << std::endl;
     }
 #endif
-#if 0
+#if 1
     // BGR color
     {
-        cv::Mat bgr = cv::Mat( 3, 4, CV_8UC(3) );
-        int x(1);
-        for ( int i = 0; i < bgr.rows; ++i ) {
-            for ( int j = 0; j < bgr.cols; ++j ) {
-                bgr.at< cv::Vec3b >( i, j )[0] = x;
-                bgr.at< cv::Vec3b >( i, j )[1] = x;
-                bgr.at< cv::Vec3b >( i, j )[2] = x;
-                ++x;
-            }
-        }
+        // it seems that af::print does not properly working for u8 data array though f32 works well.
+        typedef float bgr_dtype;
+        //typedef uint8_t bgr_dtype;
+        cv::Mat bgr;
+        cv::Mat gray = cv::Mat( 4, ncols, CV_32FC(1), data ) * 100;
+        //gray.convertTo( gray, CV_8U );
+        cv::cvtColor( gray, bgr, cv::COLOR_GRAY2BGR );
         
-        std::cout << "bgr(" << bgr.rows << ", " << bgr.cols << "):\n" << bgr << std::oct << std::endl;
-        const uint32_t channels = ( bgr.type() >> 3 ) + 1;
+        const uint32_t channels = ( ( uint32_t( bgr.type() ) >> 3 ) & 0xf ) + 1;
+        std::cout << "bgr(" << bgr.rows << ", " << bgr.cols << ") channels=" << channels << ":\n" << bgr << std::oct << std::endl;
 
-        af::array a = af::array( channels, bgr.rows, bgr.cols, bgr.ptr< unsigned char >( 0 ) );
-        af::print( "bgr->a", a );
-        af::array b = af::array( bgr.cols, bgr.rows, dim_t( channels ) );
-
-        for ( int i = 0; i < a.dims(0); ++i ) {
-            af::print( (boost::format("a[%1%]")%i).str().c_str(), a(i,af::span,af::span) );
-            // b(i,af::span,af::span) = a(i.af::span,af::span);
-        }
-
-        auto t = af::reorder( a, 2, 1, 0 );
-        af::print( "a->t", t );
+        af::array a = af::array( channels, bgr.cols, bgr.rows, bgr.ptr< bgr_dtype >() );
+        af::array abgr = af::reorder( a, 1, 2, 0 );
+        //af::print( "a", a );
+        af::print( "af::bgr", abgr );
     }
 #endif
 #if 1
     // CUDA access test using colormap (a.k.a. heat map) color coding kernel
     {
-        cv::Mat mat = cv::Mat( 4, 5, CV_32FC(1), data );
+        cv::Mat mat = cv::Mat( 4, ncols, CV_32FC(1), data );
         
         const float __levels [] = { 0.0, 0.2, 0.4, 0.6, 0.8, 0.97, 1.0 };
         //                          black, navy, cyan, green,yellow,red, white
@@ -159,7 +154,24 @@ main(int argc, char * argv[])
 
         af::print( "gray -> rgb", rgb );
     }
-#endif    
+#endif
+#if 1
+    {
+        cv::Mat mat = cv::Mat( 4, ncols, CV_32FC(1), data );
+        af::array gray = af::array( mat.cols, mat.rows, 1, mat.ptr< float >( 0 ) );
+        af::array rgb = af::array( mat.cols, mat.rows, 3 );
+
+        for ( size_t i = 0; i < gray.dims( 0 ); ++i ) {
+            for ( size_t j = 0; j < gray.dims( 1 ); ++j ) {
+                std::cout << boost::format( "gray(%1%, %2%)= %3%" ) % i % j % gray(i,j).scalar<float>() << std::endl;
+                rgb( i, j, 0 ) = gray( i, j ).scalar<float>();
+                rgb( i, j, 1 ) = gray( i, j ).scalar<float>();
+                rgb( i, j, 2 ) = gray( i, j ).scalar<float>();
+            }
+        }
+        af::print( "rgb", rgb );
+    }
+#endif
 	return 0;
 }
 
